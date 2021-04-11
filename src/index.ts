@@ -37,6 +37,7 @@ function validateEnvironmentVariables() {
 
 async function testChromeInstallation() {
   log.debug("Testing Chrome installation...")
+  if(process.env.EXTERNAL_ENDPOINT) return new Promise<void>((res) => res());
   // create a temporary file for testing
   const fileContent = `flaresolverr_${version}`
   const filePath = path.join(os.tmpdir(), 'flaresolverr.txt')

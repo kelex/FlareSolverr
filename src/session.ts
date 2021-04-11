@@ -16,6 +16,7 @@ interface SessionPageDefaults {
 
 export interface SessionsCacheItem {
   browser: Puppeteer.Browser
+  jsTimeout?: NodeJS.Timeout
   userDataDir?: string
   defaults: SessionPageDefaults
 }
@@ -52,6 +53,19 @@ function prepareBrowserProfile(id: string): string {
   }
 
   return userDataDir
+}
+
+function  getPuppeteerBrowser(puppeteerOptions: LaunchOptions) {
+  if(process.env.EXTERNAL_ENDPOINT) {
+    console.log(process.env.EXTERNAL_ENDPOINT)
+    return puppeteer.connect({
+      ...puppeteerOptions,
+      browserWSEndpoint: process.env.EXTERNAL_ENDPOINT
+    });
+  }
+  else {
+    return puppeteer.launch(puppeteerOptions);
+  }
 }
 
 export default {
@@ -92,7 +106,7 @@ export default {
 
     while (0 <= launchTries--) {
       try {
-        browser = await puppeteer.launch(puppeteerOptions)
+        browser = await getPuppeteerBrowser(puppeteerOptions);
         break
       } catch (e) {
         if (e.message !== 'Failed to launch the browser process!')
@@ -107,9 +121,13 @@ export default {
       const page = await browser.newPage()
       await page.setCookie(...cookies)
     }
-
+    const browserLifeguardTimeout = maxTimeout | 10000;
     sessionCache[id] = {
       browser: browser,
+      jsTimeout : setTimeout(() => {
+        browser.close();
+        console.warn(`Session ${id} was closed preventively by the lifeguard after ${browserLifeguardTimeout}ms`)},
+        browserLifeguardTimeout),
       userDataDir: puppeteerOptions.userDataDir,
       defaults: removeEmptyFields({
         userAgent,
@@ -117,6 +135,9 @@ export default {
         maxTimeout
       })
     }
+
+    
+    clearTimeout
 
     return sessionCache[id]
   },
@@ -126,8 +147,9 @@ export default {
   // TODO: create a sessions.close that doesn't rm the userDataDir
 
   destroy: async (id: string): Promise<boolean> => {
-    const { browser, userDataDir } = sessionCache[id]
+    const { browser, userDataDir,jsTimeout } = sessionCache[id]
     if (browser) {
+      clearTimeout(jsTimeout);
       await browser.close()
       delete sessionCache[id]
       if (userDataDir) {
